@@ -1,0 +1,14 @@
+{
+  "name": "duanzipu-cf",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "wrangler d1 migrations apply duanzipu --local && wrangler dev",
+    "db:init": "wrangler d1 migrations apply duanzipu --remote",
+    "deploy": "wrangler deploy",
+    "test": "node scripts/test-flow.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.40.0"
+  }
+}

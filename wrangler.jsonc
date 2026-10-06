@@ -1,0 +1,34 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "duanzipu",
+  "main": "src/index.js",
+  "compatibility_date": "2025-09-01",
+
+  // 网页（public/）作为静态资源；/api/* 交给 Worker
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "duanzipu",
+      // 第 2 步：换成 `npx wrangler d1 create duanzipu` 输出的 database_id
+      "database_id": "a22da48c-57f1-413a-8291-cedb0a08dc1f",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  // 第 2 步：换成你的子域名，例如 duanzi.yourname.com（域名的 DNS 要在 Cloudflare 上）
+  "routes": [{ "pattern": "duanzi.kim-ai-workshop.com", "custom_domain": true }],
+
+  "vars": {
+    "PRICE_CENTS": "600",          // 每条价格，单位分：600 = ¥6
+    "AUTHOR_SHARE_PERCENT": "100"  // 作者分成百分比：100 = 全给作者，80 = 平台留 20%
+  },
+
+  "observability": { "enabled": true }
+}
