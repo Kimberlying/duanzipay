@@ -1,74 +1,13 @@
-// 段子铺前端：无框架，hash 路由
-const $app = document.getElementById('app');
-const $nav = document.getElementById('nav');
-let me = null;
+import { $app, $nav, me, setMe, esc, yuan, time, toast, api, compressImage, loadMe, bindForm, heading, emptyState } from './core.js';
+import { viewLogin, viewRegister } from './auth.js';
+import { viewAdmin } from './admin.js';
+
 let price = 600;
 
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-const yuan = (c) => '¥' + (c / 100).toFixed(c % 100 ? 2 : 0);
-const time = (ms) => (ms ? new Date(ms).toLocaleString('zh-CN', { hour12: false }) : '');
-
-function toast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.hidden = false;
-  clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => (t.hidden = true), 2600);
-}
-
-async function api(path, { method = 'GET', data } = {}) {
-  const opts = { method, headers: {} };
-  if (data !== undefined) {
-    opts.headers['content-type'] = 'application/json';
-    opts.body = JSON.stringify(data);
-  }
-  const res = await fetch('/api' + path, opts);
-  const out = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    if (res.status === 401 && me) {
-      // 登录过期：回到登录页
-      me = null;
-      location.hash = '#/login';
-    }
-    throw new Error(out.error || '出错了');
-  }
-  return out;
-}
-
-// 把图片压缩到 D1 单行能放下的大小：最长边 800px，JPEG，必要时逐步降质量/尺寸
-async function compressImage(file, maxChars = 300_000) {
-  if (!file.type.startsWith('image/')) throw new Error('请选择图片');
-  const url = URL.createObjectURL(file);
-  try {
-    const img = await new Promise((resolve, reject) => {
-      const i = new Image();
-      i.onload = () => resolve(i);
-      i.onerror = () => reject(new Error('图片读不出来，换一张试试'));
-      i.src = url;
-    });
-    let side = 800;
-    for (let attempt = 0; attempt < 8; attempt++) {
-      const scale = Math.min(1, side / Math.max(img.naturalWidth, img.naturalHeight));
-      const w = Math.max(1, Math.round(img.naturalWidth * scale));
-      const h = Math.max(1, Math.round(img.naturalHeight * scale));
-      const canvas = document.createElement('canvas');
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      ctx.fillStyle = '#fff'; // 透明 PNG 转 JPEG 时垫白底，二维码才扫得出
-      ctx.fillRect(0, 0, w, h);
-      ctx.drawImage(img, 0, 0, w, h);
-      for (const q of [0.85, 0.7, 0.55]) {
-        const data = canvas.toDataURL('image/jpeg', q);
-        if (data.length <= maxChars) return data;
-      }
-      side = Math.round(side * 0.75);
-    }
-    throw new Error('图片太大，压缩不下来，换一张试试');
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
+document.querySelector('.skip-link').onclick = (event) => {
+  event.preventDefault();
+  $app.focus();
+};
 
 function renderNav() {
   const route = location.hash.split('?')[0] || '#/';
@@ -77,23 +16,15 @@ function renderNav() {
     : [['#/login', '登录'], ['#/register', '注册']];
   if (me?.role === 'admin') links.splice(0, links.length, ['#/admin', '管理'], ['#/me', '收款码']);
   $nav.innerHTML =
-    links.map(([h, t]) => `<a href="${h}" class="${route === h ? 'on' : ''}">${t}</a>`).join('') +
+    links.map(([h, t]) => `<a href="${h}" ${route === h ? 'aria-current="page"' : ''} class="${route === h ? 'on' : ''}">${t}</a>`).join('') +
     (me ? `<a href="#" id="logout">退出</a>` : '');
   const lo = document.getElementById('logout');
   if (lo) lo.onclick = async (e) => {
     e.preventDefault();
     await api('/logout', { method: 'POST' }).catch(() => {});
-    me = null;
+    setMe(null);
     location.hash = '#/login';
   };
-}
-
-async function loadMe() {
-  try {
-    me = (await api('/me')).user;
-  } catch {
-    me = null;
-  }
 }
 
 const routes = {
@@ -118,60 +49,14 @@ async function router() {
     return;
   }
   renderNav();
+  $app.setAttribute('aria-busy', 'true');
   try {
     await routes[route]();
   } catch (e) {
-    $app.innerHTML = `<p class="muted">${esc(e.message)}</p>`;
+    $app.innerHTML = emptyState('页面暂时没打开', esc(e.message));
+  } finally {
+    $app.setAttribute('aria-busy', 'false');
   }
-}
-
-function bindForm(form, handler) {
-  form.onsubmit = async (e) => {
-    e.preventDefault();
-    const btn = form.querySelector('button[type=submit]');
-    btn.disabled = true;
-    try {
-      await handler(Object.fromEntries(new FormData(form)));
-    } catch (err) {
-      toast(err.message);
-    } finally {
-      btn.disabled = false;
-    }
-  };
-}
-
-// ---------- 登录注册 ----------
-
-function viewLogin() {
-  $app.innerHTML = `
-    <h2>登录</h2>
-    <form class="card" id="f">
-      <label>手机号或邮箱</label><input name="account" autocomplete="username" required>
-      <label>密码</label><input name="password" type="password" autocomplete="current-password" required>
-      <div class="row"><button type="submit">登录</button><a href="#/register" class="muted">没有账号？注册</a></div>
-    </form>`;
-  bindForm(document.getElementById('f'), async (d) => {
-    await api('/login', { method: 'POST', data: d });
-    await loadMe();
-    location.hash = me.role === 'admin' ? '#/admin' : '#/';
-  });
-}
-
-function viewRegister() {
-  $app.innerHTML = `
-    <h2>注册</h2>
-    <form class="card" id="f">
-      <label>手机号或邮箱</label><input name="account" autocomplete="username" required>
-      <label>昵称（展示在你的段子上）</label><input name="name" maxlength="20" required>
-      <label>密码（至少 6 位）</label><input name="password" type="password" minlength="6" autocomplete="new-password" required>
-      <div class="row"><button type="submit">注册</button><a href="#/login" class="muted">已有账号？登录</a></div>
-    </form>`;
-  bindForm(document.getElementById('f'), async (d) => {
-    await api('/register', { method: 'POST', data: d });
-    await loadMe();
-    toast('注册成功');
-    location.hash = '#/';
-  });
 }
 
 // ---------- 广场 / 下单 ----------
@@ -180,21 +65,29 @@ async function viewMarket() {
   const { pieces, price_cents } = await api('/pieces');
   price = price_cents;
   $app.innerHTML = `
-    <h2>段子广场 <span class="meta">每条 <span class="price">${yuan(price)}</span>，买下后独享全文</span></h2>
-    ${pieces.length ? '' : '<p class="muted">还没有在售的段子。</p>'}
+    <section class="market-hero">
+      <div><span class="eyebrow">生活有点苦，来点好笑的。</span><h1>好段子，<br>值得<span>独享。</span></h1>
+      <p>发现有趣的开头，把完整的快乐带走。</p>
+      <a class="text-link" href="#/submit">你也有个好段子？来投稿 <span aria-hidden="true">↗</span></a></div>
+      <div class="hero-art"><img src="/shop.svg" alt="" width="420" height="300"><span class="hero-note">每条只卖一次 · 买下后独享全文</span></div>
+    </section>
+    <div class="section-heading"><h2>逛逛段子铺 <span class="count">${pieces.length}</span></h2><span class="meta">统一售价 <span class="price">${yuan(price)}</span> / 条</span></div>
+    ${pieces.length ? '' : emptyState('好段子正在路上', '暂时还没有在售内容，也许下一条就来自你。', '#/submit', '写个段子')}
+    <div class="piece-grid">
     ${pieces
       .map(
         (p) => `
-      <div class="card">
+      <article class="card piece-card">
+        <div class="piece-top"><span class="eyebrow">一个有趣的开头</span><span class="piece-quote" aria-hidden="true">“</span></div>
         <h3>${esc(p.title)}</h3>
         <div class="preview">${esc(p.preview)}…</div>
-        <div class="row">
-          <span class="meta">作者 ${esc(p.author)}</span>
-          ${p.mine ? '<span class="tag">我的</span>' : `<button data-buy="${p.id}">${yuan(price)} 买下</button>`}
+        <div class="piece-footer">
+          <span class="author"><span class="avatar" aria-hidden="true">${esc(Array.from(p.author || '匿')[0])}</span>${esc(p.author)}</span>
+          ${p.mine ? '<span class="tag">我的投稿</span>' : `<button data-buy="${p.id}" aria-label="${esc(yuan(price) + ' 买下《' + p.title + '》')}">${yuan(price)} 买下 <span aria-hidden="true">↗</span></button>`}
         </div>
-      </div>`,
+      </article>`,
       )
-      .join('')}`;
+      .join('')}</div>`;
   $app.querySelectorAll('[data-buy]').forEach((b) => {
     b.onclick = async () => {
       if (!confirm(`确定花 ${yuan(price)} 买下这条？下单后请扫码付款。`)) return;
@@ -215,14 +108,14 @@ async function viewBought() {
   const [{ orders }, { qr }] = await Promise.all([api('/orders/mine'), api('/pay-qr')]);
   const pending = orders.some((o) => o.status === 'pending');
   $app.innerHTML = `
-    <h2>我买的</h2>
+    ${heading('我买的段子', '你的独家快乐，都收在这里。', '我的书架')}
     ${
       pending
         ? `<div class="card"><b>待付款</b>：请扫下面的码付款，<b>备注里写订单号</b>。管理员确认收款后就能看到全文。
            ${qr ? `<img class="qr" src="${qr}" alt="收款码">` : '<p class="muted">管理员还没上传收款码，请联系管理员。</p>'}</div>`
         : ''
     }
-    ${orders.length ? '' : '<p class="muted">还没买过段子，去<a href="#/">广场</a>看看。</p>'}
+    ${orders.length ? '' : emptyState('书架还是空的', '去广场挑一个喜欢的开头吧。', '#/', '逛逛广场')}
     ${orders
       .map(
         (o) => `
@@ -257,11 +150,11 @@ async function viewBought() {
 
 function viewSubmit() {
   $app.innerHTML = `
-    <h2>投稿</h2>
-    <form class="card" id="f">
-      <label>标题</label><input name="title" maxlength="60" required>
-      <label>开头（公开展示，用来吸引买家）</label><textarea name="preview" maxlength="300" required></textarea>
-      <label>全文（买家付款后才能看到）</label><textarea name="content" maxlength="5000" style="min-height:160px" required></textarea>
+    ${heading('把你的好笑，写下来。', '留一个让人好奇的开头，把包袱藏在全文里。', '创作时间')}
+    <form class="card editor-card" id="f">
+      <label for="title">标题 <span class="field-hint">最多 60 字</span></label><input id="title" placeholder="给这个段子起个名字" name="title" maxlength="60" required>
+      <label for="preview">公开开头 <span class="field-hint">最多 300 字</span></label><p class="field-description">展示在广场，让读者想知道接下来发生了什么。</p><textarea id="preview" placeholder="故事是这样开始的……" name="preview" maxlength="300" required></textarea>
+      <label for="content">完整段子 <span class="field-hint">最多 5,000 字</span></label><p class="field-description">买家付款并经管理员确认后可见。</p><textarea id="content" placeholder="在这里写下完整的故事和包袱" name="content" maxlength="5000" class="content-input" required></textarea>
       <p class="meta">提交后由管理员审核，通过后上架。每条卖出后会按你的收款码结算，记得在“我的”里上传收款码。</p>
       <div class="row"><button type="submit">提交审核</button></div>
     </form>`;
@@ -285,15 +178,15 @@ async function viewMine() {
     return '<span class="tag ok">在售</span>';
   };
   $app.innerHTML = `
-    <h2>我的投稿</h2>
-    ${me.has_qr ? '' : '<div class="card">还没上传收款码，卖出后没法给你结算。<a href="#/me">去上传</a></div>'}
-    ${pieces.length ? '' : '<p class="muted">还没投过稿，<a href="#/submit">去投稿</a>。</p>'}
+    ${heading('我的投稿', '从一个灵感，到一份被买走的快乐。', '我的创作')}
+    ${me.has_qr ? '' : '<div class="notice">先备好收款码，卖出后才能收到结算。<a href="#/me">去上传 ↗</a></div>'}
+    ${pieces.length ? '' : emptyState('第一个段子，从这里开始', '把生活里有趣的瞬间写下来。', '#/submit', '去投稿')}
     ${pieces
       .map(
         (p) => `
       <div class="card">
         <h3>${esc(p.title)}</h3>
-        <div class="row" style="margin-top:0">${status(p)}<span class="meta">${time(p.created_at)}</span></div>
+        <div class="row status-row">${status(p)}<span class="meta">${time(p.created_at)}</span></div>
         <details><summary class="meta">看全文</summary><div class="full">${esc(p.content)}</div></details>
       </div>`,
       )
@@ -306,12 +199,12 @@ async function viewMe() {
   const { qr } = await api('/me/qr');
   const isAdmin = me.role === 'admin';
   $app.innerHTML = `
-    <h2>${isAdmin ? '平台收款码' : '我的'}</h2>
+    ${heading(isAdmin ? '平台收款码' : '我的账户', isAdmin ? '买家扫码付款，使用这里的收款码。' : '管理你的收款码，让好段子有好回报。', '账户设置')}
     <div class="card">
-      <div>${esc(me.name)} <span class="meta">${esc(me.account)}</span></div>
+      <div class="profile"><span class="avatar" aria-hidden="true">${esc(Array.from(me.name)[0])}</span><div><h3>${esc(me.name)}</h3><span class="meta">${esc(me.account)}</span></div></div>
       <p class="meta">${isAdmin ? '买家下单后会看到这张码，用来付款给你。' : '卖出段子后，管理员会扫这张码给你结算。'}</p>
       ${qr ? `<img class="qr" id="qrimg" src="${qr}" alt="收款码">` : '<p class="muted" id="qrimg">还没上传收款码</p>'}
-      <label>上传${qr ? '新的' : ''}微信或支付宝收款码</label>
+      <label for="qrfile">上传${qr ? '新的' : ''}微信或支付宝收款码</label>
       <input type="file" id="qrfile" accept="image/*">
       <div class="row"><button id="qrup" disabled>上传</button><span class="meta" id="qrinfo"></span></div>
     </div>`;
@@ -346,124 +239,6 @@ async function viewMe() {
       up.disabled = false;
     }
   };
-}
-
-// ---------- 管理 ----------
-
-let adminTab = 'review';
-
-async function viewAdmin() {
-  const { stats } = await api('/admin/stats');
-  const tabs = [
-    ['review', `审核 (${stats.pending_pieces})`],
-    ['orders', `待收款 (${stats.pending_orders})`],
-    ['paid', '已付款'],
-    ['settle', '结算'],
-  ];
-  $app.innerHTML = `
-    <div class="stats">
-      <div class="stat"><b>${stats.users}</b><span>用户</span></div>
-      <div class="stat"><b>${stats.paid_orders}</b><span>已卖出</span></div>
-      <div class="stat"><b>${yuan(stats.income_cents)}</b><span>总收款</span></div>
-      <div class="stat"><b>${stats.pending_orders}</b><span>待收款</span></div>
-      <div class="stat"><b>${stats.pending_pieces}</b><span>待审核</span></div>
-      <div class="stat"><b>${yuan(stats.unsettled_cents)}</b><span>待结算</span></div>
-    </div>
-    <div class="tabs">${tabs.map(([k, t]) => `<button data-tab="${k}" class="${adminTab === k ? 'on' : ''}">${t}</button>`).join('')}
-      <a class="btn ghost" href="/api/admin/export.csv">导出 CSV</a></div>
-    <div id="panel"><p class="muted">加载中…</p></div>`;
-  $app.querySelectorAll('[data-tab]').forEach((b) => (b.onclick = () => ((adminTab = b.dataset.tab), viewAdmin())));
-  const panel = document.getElementById('panel');
-  await { review: adminReview, orders: adminOrders, paid: adminPaid, settle: adminSettle }[adminTab](panel);
-}
-
-async function act(path, data, okMsg) {
-  try {
-    await api(path, { method: 'POST', data: data ?? {} });
-    if (okMsg) toast(okMsg);
-  } catch (e) {
-    toast(e.message);
-  }
-  viewAdmin();
-}
-
-async function adminReview(panel) {
-  const { pieces } = await api('/admin/pieces?status=pending');
-  panel.innerHTML = pieces.length
-    ? pieces
-        .map(
-          (p) => `
-      <div class="card">
-        <h3>${esc(p.title)}</h3>
-        <div class="meta">${esc(p.author)}（${esc(p.author_account)}） · ${time(p.created_at)}</div>
-        <div class="preview"><b>开头：</b>${esc(p.preview)}</div>
-        <div class="full">${esc(p.content)}</div>
-        <div class="row"><button data-ok="${p.id}">通过</button><button class="ghost" data-no="${p.id}">不通过</button></div>
-      </div>`,
-        )
-        .join('')
-    : '<p class="muted">没有待审核的投稿。</p>';
-  panel.querySelectorAll('[data-ok]').forEach((b) => (b.onclick = () => act(`/admin/pieces/${b.dataset.ok}/review`, { action: 'approve' }, '已上架')));
-  panel.querySelectorAll('[data-no]').forEach((b) => (b.onclick = () => act(`/admin/pieces/${b.dataset.no}/review`, { action: 'reject' }, '已拒绝')));
-}
-
-async function adminOrders(panel) {
-  const { orders } = await api('/admin/orders?status=pending');
-  panel.innerHTML = orders.length
-    ? `<p class="meta">核对收款记录里的备注订单号和金额，收到了再点“确认收款”。</p>` +
-      orders
-        .map(
-          (o) => `
-      <div class="card">
-        <h3>订单号 ${o.id} · ${yuan(o.amount_cents)}</h3>
-        <div class="meta">《${esc(o.title)}》 · 买家 ${esc(o.buyer)}（${esc(o.buyer_account)}） · ${time(o.created_at)}</div>
-        <div class="row"><button data-confirm="${o.id}">确认收款</button><button class="ghost" data-cancel="${o.id}">取消订单</button></div>
-      </div>`,
-        )
-        .join('')
-    : '<p class="muted">没有待确认收款的订单。</p>';
-  panel.querySelectorAll('[data-confirm]').forEach((b) => (b.onclick = () => confirm(`确认已收到订单 ${b.dataset.confirm} 的款？`) && act(`/admin/orders/${b.dataset.confirm}/confirm`, null, '已确认，买家能看到全文了')));
-  panel.querySelectorAll('[data-cancel]').forEach((b) => (b.onclick = () => confirm('取消后段子重新上架，确定？') && act(`/admin/orders/${b.dataset.cancel}/cancel`, null, '已取消')));
-}
-
-async function adminPaid(panel) {
-  const { orders } = await api('/admin/orders?status=paid');
-  panel.innerHTML = orders.length
-    ? orders
-        .map(
-          (o) => `
-      <div class="card">
-        <h3>订单号 ${o.id} · ${yuan(o.amount_cents)}</h3>
-        <div class="meta">《${esc(o.title)}》 · 作者 ${esc(o.author)} · 买家 ${esc(o.buyer)} · 收款 ${time(o.paid_at)}</div>
-        ${o.settled_at ? `<span class="tag ok">已结算 ${time(o.settled_at)}</span>` : '<span class="tag warn">待结算</span>'}
-      </div>`,
-        )
-        .join('')
-    : '<p class="muted">还没有已付款的订单。</p>';
-}
-
-async function adminSettle(panel) {
-  const { authors } = await api('/admin/settlements');
-  panel.innerHTML = authors.length
-    ? `<p class="meta">扫作者的收款码付款，付完点“已结算”。</p>` +
-      authors
-        .map(
-          (a) => `
-      <div class="card">
-        <h3>${esc(a.name)} · 应结 <span class="price">${yuan(a.total_cents)}</span></h3>
-        <div class="meta">${esc(a.account)} · ${a.count} 条 · 订单号 ${a.order_ids.join('、')}</div>
-        ${a.qr ? `<img class="qr" src="${a.qr}" alt="收款码">` : '<p class="muted">作者还没上传收款码，请联系作者。</p>'}
-        <div class="row"><button data-settle="${a.author_id}" data-ids="${a.order_ids.join(',')}">已结算 ${yuan(a.total_cents)}</button></div>
-      </div>`,
-        )
-        .join('')
-    : '<p class="muted">没有待结算的款项。</p>';
-  panel.querySelectorAll('[data-settle]').forEach(
-    (b) =>
-      (b.onclick = () =>
-        confirm('确认已经付给作者了？') &&
-        act(`/admin/settlements/${b.dataset.settle}`, { order_ids: b.dataset.ids.split(',').map(Number) }, '已标记结算')),
-  );
 }
 
 window.addEventListener('hashchange', router);
