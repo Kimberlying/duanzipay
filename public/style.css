@@ -48,7 +48,7 @@ h3 { font-size: 18px; font-weight: 500; line-height: 1.5; letter-spacing: -.3px;
 .full { white-space: pre-wrap; background: #1c1c1c; color: #efefef; border-radius: 12px; padding: 22px; margin-top: 16px; line-height: 1.9; }
 .preview { white-space: pre-wrap; line-height: 1.9; }
 label { display: block; margin: 24px 0 9px; font-size: 13px; font-weight: 500; color: #dedede; }
-input, textarea, select { display: block; width: 100%; padding: 13px 16px; border: 1px solid #ffffff21; border-radius: 10px; color: var(--ink); background: #171717; font-size: 14px; transition: border-color .18s, box-shadow .18s; }
+input, textarea, select { display: block; width: 100%; padding: 13px 16px; border: 1px solid #ffffff21; border-radius: 10px; color: var(--ink); background: #171717; font-size: 16px; transition: border-color .18s, box-shadow .18s; }
 input::placeholder, textarea::placeholder { color: #9a9a9a; }
 input:focus, textarea:focus, select:focus { border-color: #78d0cd88; outline: 2px solid #78d0cd16; outline-offset: 1px; }
 input[type="file"] { border-style: dashed; padding: 20px; }
