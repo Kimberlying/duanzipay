@@ -27,7 +27,8 @@ wrangler.jsonc            Cloudflare 配置
 - `public/auth.js`：登录与注册；`public/admin.js`：管理工作台
 - `public/core.js`：共享登录状态、API 请求、图片压缩及表单处理
 - `public/style.css` / `public/auth.css`：公共样式与账户入口样式，断点为 600px、900px
-- `public/shop.svg` / `public/favicon.svg`：本地矢量插画与图标，不依赖外部图片或字体服务
+- 视觉采用近黑背景、细描边面板和黄到青绿渐变；标志与图标为内联 SVG，没有外部图片或图标库
+- 按设计参考加载 Google Fonts 的 Inter（400/500/600），中文和字体加载失败时使用系统字体；动画尊重减少动态效果设置
 
 `temp/` 只保存本地预览和临时检查，不纳入版本控制。界面改版不需要数据库迁移。
 

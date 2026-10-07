@@ -4,6 +4,16 @@ import { viewAdmin } from './admin.js';
 
 let price = 600;
 
+const rays = document.querySelector('.rays');
+for (let i = 0; i < 24; i++) {
+  const angle = -Math.PI / 2 + i * Math.PI / 12;
+  const ray = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  for (const [name, radius, axis] of [['x1', 10.4, Math.cos], ['y1', 10.4, Math.sin], ['x2', 22.6, Math.cos], ['y2', 22.6, Math.sin]]) {
+    ray.setAttribute(name, 26 + radius * axis(angle));
+  }
+  rays.appendChild(ray);
+}
+
 document.querySelector('.skip-link').onclick = (event) => {
   event.preventDefault();
   $app.focus();
@@ -66,10 +76,10 @@ async function viewMarket() {
   price = price_cents;
   $app.innerHTML = `
     <section class="market-hero">
-      <div><span class="eyebrow">生活有点苦，来点好笑的。</span><h1>好段子，<br>值得<span>独享。</span></h1>
+      <div><span class="eyebrow"><span class="tiny-dot"></span>生活有点苦，来点好笑的。</span><h1><span class="hl-mask"><span class="hl-line">好段子，</span></span><span class="hl-mask"><span class="hl-line">值得独享。</span></span></h1>
       <p>发现有趣的开头，把完整的快乐带走。</p>
-      <a class="text-link" href="#/submit">你也有个好段子？来投稿 <span aria-hidden="true">↗</span></a></div>
-      <div class="hero-art"><img src="/shop.svg" alt="" width="420" height="300"><span class="hero-note">每条只卖一次 · 买下后独享全文</span></div>
+      <a class="btn hero-cta" href="#/submit">写个段子 <span aria-hidden="true">↗</span></a></div>
+      <div class="hero-note"><span>公开开头</span><i aria-hidden="true">→</i><span>买下段子</span><i aria-hidden="true">→</i><span>独享全文</span></div>
     </section>
     <div class="section-heading"><h2>逛逛段子铺 <span class="count">${pieces.length}</span></h2><span class="meta">统一售价 <span class="price">${yuan(price)}</span> / 条</span></div>
     ${pieces.length ? '' : emptyState('好段子正在路上', '暂时还没有在售内容，也许下一条就来自你。', '#/submit', '写个段子')}
